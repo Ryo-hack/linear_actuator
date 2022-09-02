@@ -27,13 +27,14 @@ class LinearAct :
         
     def Actuator_Init(self):
         rospy.loginfo("hardware Initializing....")
-        self.ser.write(":010504270000EE\r\n") 
-        #(":01050427FF00D0\r\n")PIO 有効
+        self.ser.write(":01050427FF00D0\r\n")#PIO 有効　
+        #self.ser.write(":010504270000EE\r\n") #PIO 無効
         msg = self.ser.readline()
         if msg ==msg:
             rospy.loginfo(msg)
             rospy.loginfo("hardware Initialize OK...")
-            self.ser.write(":01050414FF00E3\r\n")
+            self.ser.write(":01050414FF00E3\r\n")#教示 
+            #self.ser.write(":0105041400001F\r\n") #通常
             msg = self.ser.readline()
             rospy.loginfo(msg)
             self.ser.write(":01050403FF00F4\r\n")
@@ -51,20 +52,41 @@ class LinearAct :
             rospy.loginfo("hardware Initialize false ")
             sys.exit()
         return 
+
+    def home(self):
+            self.ser.write(":01060D001000DC\r\n")
+            msg = self.ser.readline()
+            rospy.loginfo(msg)
+            self.ser.write(":01060D001010CC\r\n")
+            msg = self.ser.readline()
+            rospy.loginfo(msg)
+
     
     def abs_move(self,target_point,target_velocity,target_acceleration):
         target_point = str(hex(100*target_point ))[2:].zfill(4)
         target_velocity = str(hex(100*target_velocity))[2:].zfill(4)
         target_acceleration =str(hex(int(100*target_acceleration)))[2:].zfill(4)
         target_msg =(str(":011099000009120000")+ target_point +str("0000") +str("000A") +str("0000")  + target_velocity + target_acceleration +str("00000000"))
+
         list = re.split('(..)',target_msg[1:])[1::2]
         LRC = 0
         for i in range(len(list)):
             LRC =LRC +int(list[i],16)
         LRC = str(hex(int(hex(LRC),16)-int( ("0x")+str(10**(len(str(LRC)[:2])+1)),16)))[-2:]
         target_msg = (target_msg + LRC +str("\r\n")).upper()
+
         rospy.loginfo(target_msg)
         self.ser.write(target_msg)
+
+    def ERC_check (self):
+        msg ="010504140000"#"010504270000" 
+        list = re.split('(..)',msg[1:])[1::2]
+        LRC = 0
+        for i in range(len(list)):
+            LRC =LRC +int(list[i],16)
+        LRC = str(hex(int(hex(LRC),16)-int( ("0x")+str(10**(len(str(LRC)[:2])+1)),16)))[-2:]
+        msg = (msg + LRC +str("\r\n")).upper()
+        rospy.loginfo(msg)
 
     def relate_move(self,target_point,target_velocity,target_acceleration):
         target_point = str(hex(100*target_point ))[2:].zfill(4)
@@ -131,12 +153,14 @@ if __name__ == '__main__':
     rospy.init_node("IHI_linear_actuator")
     LinearAct= LinearAct()
     LinearAct.Actuator_Init()
+    LinearAct.ERC_check()
     #LinearAct.Alm_reset()
-    #LinearAct.abs_move(50,100,0.3)
+    LinearAct.home()
+    #LinearAct.relate_move(200,100,0.3)
     rate = rospy.Rate(100000)
     while not rospy.is_shutdown():
         #LinearAct.relate_move()
-        #LinearAct.Pnow()
+        LinearAct.Pnow()
         #LinearAct.Vnow()
         #LinearAct.Cnow()
         rate.sleep()    
