@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from re import L, S
+import re
 import rospy
 import sys
 import rosparam
@@ -15,9 +16,9 @@ class LinearAct :
         self.velocity  =0.0
         self.current  =0.0
         self.alm_msg = 0.0
-        self.current_pub = rospy.Publisher("IHI_linearActuator_Current", Float32MultiArray, queue_size = 10)
-        self.point_pub = rospy.Publisher("IHI_linearActuator_Point",  Float32MultiArray, queue_size=10)
-        self.velocity_pub = rospy.Publisher("IHI_linearActuator_Velocity", Float32MultiArray, queue_size = 10)
+        self.current_pub = rospy.Publisher("IHI_linearActuator_Current", Float32, queue_size = 10)
+        self.point_pub = rospy.Publisher("IHI_linearActuator_Point",  Float32, queue_size=10)
+        self.velocity_pub = rospy.Publisher("IHI_linearActuator_Velocity", Float32, queue_size = 10)
         self.port_name = rospy.get_param('~port','/dev/ttyUSB0')
         if len(sys.argv) == 2 :
             self.port_name  = sys.argv[1]
@@ -26,9 +27,9 @@ class LinearAct :
         
     def Actuator_Init(self):
         rospy.loginfo("hardware Initializing....")
-        self.ser.write(":01050427FF00D0\r\n")
+        self.ser.write(":010504270000EE\r\n") 
+        #(":01050427FF00D0\r\n")PIO 有効
         msg = self.ser.readline()
-        print (type(msg))
         if msg ==msg:
             rospy.loginfo(msg)
             rospy.loginfo("hardware Initialize OK...")
@@ -51,32 +52,60 @@ class LinearAct :
             sys.exit()
         return 
     
-    def abs_move(self):
-        self.ser.write(":010504070000EF\r\n")
+    def abs_move(self,target_point,target_velocity,target_acceleration):
+        target_point = str(hex(100*target_point ))[2:].zfill(4)
+        target_velocity = str(hex(100*target_velocity))[2:].zfill(4)
+        target_acceleration =str(hex(int(100*target_acceleration)))[2:].zfill(4)
+        target_msg =(str(":011099000009120000")+ target_point +str("0000") +str("000A") +str("0000")  + target_velocity + target_acceleration +str("00000000"))
+        list = re.split('(..)',target_msg[1:])[1::2]
+        LRC = 0
+        for i in range(len(list)):
+            LRC =LRC +int(list[i],16)
+        LRC = str(hex(int(hex(LRC),16)-int( ("0x")+str(10**(len(str(LRC)[:2])+1)),16)))[-2:]
+        target_msg = (target_msg + LRC +str("\r\n")).upper()
+        rospy.loginfo(target_msg)
+        self.ser.write(target_msg)
 
-    def relate_move(self):
-        self.ser.write(":01109900000912000003E80000000A00002710001E00000008E9\r\n")
-
+    def relate_move(self,target_point,target_velocity,target_acceleration):
+        target_point = str(hex(100*target_point ))[2:].zfill(4)
+        target_velocity = str(hex(100*target_velocity))[2:].zfill(4)
+        target_acceleration =str(hex(int(100*target_acceleration)))[2:].zfill(4)
+        target_msg =(str(":011099000009120000")+ target_point +str("0000") +str("000A") +str("0000")  + target_velocity + target_acceleration +str("00000008"))
+        list = re.split('(..)',target_msg[1:])[1::2]
+        LRC = 0
+        for i in range(len(list)):
+            LRC =LRC +int(list[i],16)
+        LRC = str(hex(int(hex(LRC),16)-int( ("0x")+str(10**(len(str(LRC)[:2])+1)),16)))[-2:]
+        target_msg = (target_msg + LRC +str("\r\n")).upper()
+        rospy.loginfo(target_msg)
+        self.ser.write(target_msg)
 
     def Pnow(self):
         self.ser.write(":0103900000026A\r\n")
-        self.point = self.ser.readline()
+        _point = self.ser.readline()
+        self.point =0.01*(float(str(int(_point[7:11],16)) + str(int(_point[11:15],16))))
         rospy.loginfo(self.point)
+        self.point_pub.publish(self.point)    
 
     def Vnow(self):
         self.ser.write(":0103900A000260\r\n")
-        self.velocity = self.ser.readline()
+        _velocity = self.ser.readline()
+        self.velocity =0.01*(float(str(int(_velocity[7:11],16)) + str(int(_velocity[11:15],16))))
         rospy.loginfo(self.velocity)
-    
+        self.velocity_pub.publish(self.velocity)
+
+
     def Cnow(self):
         self.ser.write(":0103900C00025E\r\n")
-        self.current = self.ser.readline()
-        rospy.loginfo(self.current)
-    
+        _current = self.ser.readline()
+        self.current =0.01*(float(str(int(_current[7:11],16)) + str(int(_current[11:15],16))))
+        rospy.loginfo(self.current)  
+        self.current_pub.publish(self.current)
+
     def Alm_now(self):
         self.ser.write(":01039002000169\r\n")
         self.alm_msg = self.ser.readline()
-        #if :
+        #if :\
         #    flag = True
        # else:
         #       flag = False
@@ -94,9 +123,7 @@ class LinearAct :
             rospy.loginfo("alam_reset_false")
             sys.exit()
 
-    def publisher(self):
-        rospy.loginfo(self.force_data)
-        rospy.loginfo(vector)
+
    
 
 
@@ -104,8 +131,12 @@ if __name__ == '__main__':
     rospy.init_node("IHI_linear_actuator")
     LinearAct= LinearAct()
     LinearAct.Actuator_Init()
-    LinearAct.relate_move()
+    #LinearAct.Alm_reset()
+    #LinearAct.abs_move(50,100,0.3)
     rate = rospy.Rate(100000)
     while not rospy.is_shutdown():
-        LinearAct.Pnow()
+        #LinearAct.relate_move()
+        #LinearAct.Pnow()
+        #LinearAct.Vnow()
+        #LinearAct.Cnow()
         rate.sleep()    
